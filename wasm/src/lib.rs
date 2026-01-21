@@ -1,8 +1,13 @@
 use wasm_bindgen::prelude::*;
 use web_sys::*;
 
+mod camera;
+mod math;
 mod renderer;
+mod shader;
+mod viewer;
 use renderer::Renderer;
+pub use viewer::Viewer;
 
 #[wasm_bindgen]
 pub fn start(canvas_id: &str) -> Result<(), JsValue> {
@@ -10,7 +15,10 @@ pub fn start(canvas_id: &str) -> Result<(), JsValue> {
     let gl = get_webgl_context(&canvas)?;
 
     let renderer = Renderer::new(gl)?;
-    renderer.draw_triangle();
+    let width = canvas.width() as i32;
+    let height = canvas.height() as i32;
+    let mvp = crate::math::Mat4::identity();
+    renderer.draw_triangle(width, height, &mvp.m);
 
     Ok(())
 }
@@ -28,7 +36,7 @@ fn get_canvas_by_id(canvas_id: &str) -> Result<HtmlCanvasElement, JsValue> {
         .map_err(JsValue::from)
 }
 
-fn get_webgl_context(canvas: &HtmlCanvasElement) -> Result<WebGlRenderingContext, JsValue> {
+pub(crate) fn get_webgl_context(canvas: &HtmlCanvasElement) -> Result<WebGlRenderingContext, JsValue> {
     let ctx = canvas
         .get_context("webgl")?
         .ok_or_else(|| JsValue::from_str("WebGL context unavailable"))?;
