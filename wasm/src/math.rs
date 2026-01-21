@@ -115,6 +115,32 @@ impl Mat4 {
         }
     }
 
+    pub fn orthographic(left: f32, right: f32, bottom: f32, top: f32, znear: f32, zfar: f32) -> Mat4 {
+        let lr = 1.0 / (left - right);
+        let bt = 1.0 / (bottom - top);
+        let nf = 1.0 / (znear - zfar);
+        Mat4 {
+            m: [
+                2.0 * lr,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                2.0 * bt,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                2.0 * nf,
+                0.0,
+                (left + right) * lr,
+                (top + bottom) * bt,
+                (zfar + znear) * nf,
+                1.0,
+            ],
+        }
+    }
+
     pub fn look_at(eye: Vec3, target: Vec3, up: Vec3) -> Mat4 {
         let f = target.sub(eye).normalize();
         let s = f.cross(up).normalize();

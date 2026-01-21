@@ -6,6 +6,12 @@ use crate::geometry::{make_primitive, Primitive};
 use crate::math::{Mat4, Vec3};
 use crate::renderer::{RenderMode, Renderer};
 
+#[derive(Clone, Copy, Debug)]
+enum ViewMode {
+    Perspective,
+    Orthographic,
+}
+
 #[wasm_bindgen]
 pub struct Viewer {
     renderer: Renderer,
@@ -13,6 +19,8 @@ pub struct Viewer {
     width: i32,
     height: i32,
     bounds: Bounds,
+    view_mode: ViewMode,
+    orthographic_size: f32,
 }
 
 #[wasm_bindgen]
@@ -36,6 +44,8 @@ impl Viewer {
             width,
             height,
             bounds,
+            view_mode: ViewMode::Perspective,
+            orthographic_size: 2.0,
         };
         viewer.fit_to_view();
         viewer.draw();
@@ -72,9 +82,22 @@ impl Viewer {
         }
     }
 
+    /// Set the view mode.
+    /// Allowed: "perspective", "orth".
+    pub fn set_view_mode(&mut self, mode: &str) {
+        match mode {
+            "perspective" => self.view_mode = ViewMode::Perspective,
+            "orth" => self.view_mode = ViewMode::Orthographic,
+            _ => {}
+        }
+    }
+
     pub fn fit_to_view(&mut self) {
         let aspect = self.width as f32 / self.height as f32;
         self.camera.fit_to_bounds(self.bounds, aspect);
+        // Update orthographic size based on bounds
+        let r = self.bounds.radius().max(1e-4);
+        self.orthographic_size = r * 1.15;
     }
 
     /// Rotate/orbit in radians.
@@ -89,12 +112,29 @@ impl Viewer {
 
     /// Zoom factor ( >1 out, <1 in ).
     pub fn zoom(&mut self, factor: f32) {
-        self.camera.zoom(factor);
+        match self.view_mode {
+            ViewMode::Perspective => {
+                self.camera.zoom(factor);
+            }
+            ViewMode::Orthographic => {
+                // In orthographic mode, zoom by adjusting the orthographic size
+                self.orthographic_size = (self.orthographic_size / factor).max(0.01);
+            }
+        }
     }
 
     pub fn draw(&self) {
         let aspect = self.width as f32 / self.height as f32;
-        let proj = Mat4::perspective(self.camera.fovy, aspect, self.camera.znear, self.camera.zfar);
+        let proj = match self.view_mode {
+            ViewMode::Perspective => {
+                Mat4::perspective(self.camera.fovy, aspect, self.camera.znear, self.camera.zfar)
+            }
+            ViewMode::Orthographic => {
+                let h = self.orthographic_size;
+                let w = h * aspect;
+                Mat4::orthographic(-w, w, -h, h, self.camera.znear, self.camera.zfar)
+            }
+        };
         let view = Mat4::look_at(self.camera.eye(), self.camera.target, self.camera.view_up());
         let model = Mat4::identity();
         self.renderer
