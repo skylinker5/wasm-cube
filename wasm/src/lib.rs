@@ -2,6 +2,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::*;
 
 mod camera;
+mod geometry;
 mod math;
 mod renderer;
 mod shader;
@@ -14,11 +15,15 @@ pub fn start(canvas_id: &str) -> Result<(), JsValue> {
     let canvas = get_canvas_by_id(canvas_id)?;
     let gl = get_webgl_context(&canvas)?;
 
-    let renderer = Renderer::new(gl)?;
+    let mut renderer = Renderer::new(gl)?;
     let width = canvas.width() as i32;
     let height = canvas.height() as i32;
-    let mvp = crate::math::Mat4::identity();
-    renderer.draw_triangle(width, height, &mvp.m);
+    let proj = crate::math::Mat4::identity();
+    let view = crate::math::Mat4::identity();
+    let model = crate::math::Mat4::identity();
+    let mesh = geometry::triangle();
+    renderer.set_mesh(&mesh);
+    renderer.draw(width, height, &proj.m, &view.m, &model.m);
 
     Ok(())
 }

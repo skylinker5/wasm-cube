@@ -2,6 +2,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
 use crate::camera::{Bounds, Camera};
+use crate::geometry::{make_primitive, Primitive};
 use crate::math::{Mat4, Vec3};
 use crate::renderer::Renderer;
 
@@ -22,11 +23,12 @@ impl Viewer {
         let width = canvas.width() as i32;
         let height = canvas.height() as i32;
 
-        let renderer = Renderer::new(gl)?;
+        let mut renderer = Renderer::new(gl)?;
         let camera = Camera::new();
 
-        // Default bounds = the current triangle.
-        let bounds = Bounds::new(Vec3::new(-0.5, -0.5, 0.0), Vec3::new(0.5, 0.5, 0.0));
+        let mesh = make_primitive(Primitive::Triangle);
+        renderer.set_mesh(&mesh);
+        let bounds = mesh.bounds;
 
         let mut viewer = Viewer {
             renderer,
@@ -47,6 +49,17 @@ impl Viewer {
 
     pub fn set_bounds(&mut self, min_x: f32, min_y: f32, min_z: f32, max_x: f32, max_y: f32, max_z: f32) {
         self.bounds = Bounds::new(Vec3::new(min_x, min_y, min_z), Vec3::new(max_x, max_y, max_z));
+    }
+
+    /// Switch the rendered primitive.
+    /// Allowed: "triangle", "cube", "cylinder", "sphere", "torus".
+    pub fn set_primitive(&mut self, name: &str) {
+        if let Some(p) = Primitive::from_str(name) {
+            let mesh = make_primitive(p);
+            self.renderer.set_mesh(&mesh);
+            self.bounds = mesh.bounds;
+            self.fit_to_view();
+        }
     }
 
     pub fn fit_to_view(&mut self) {
@@ -74,9 +87,8 @@ impl Viewer {
         let proj = Mat4::perspective(self.camera.fovy, aspect, self.camera.znear, self.camera.zfar);
         let view = Mat4::look_at(self.camera.eye(), self.camera.target, self.camera.view_up());
         let model = Mat4::identity();
-        let mvp = proj.mul(view).mul(model);
         self.renderer
-            .draw_triangle(self.width, self.height, &mvp.m);
+            .draw(self.width, self.height, &proj.m, &view.m, &model.m);
     }
 }
 

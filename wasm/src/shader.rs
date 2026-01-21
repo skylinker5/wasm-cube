@@ -3,15 +3,35 @@ use web_sys::{WebGlProgram, WebGlRenderingContext, WebGlShader};
 
 pub(crate) const VERTEX_SHADER_SRC: &str = r#"
 attribute vec3 position;
-uniform mat4 u_mvp;
+attribute vec3 normal;
+
+uniform mat4 u_model;
+uniform mat4 u_view;
+uniform mat4 u_proj;
+
+varying vec3 v_normal_vs;
+
 void main() {
-    gl_Position = u_mvp * vec4(position, 1.0);
+    vec4 pos_vs = u_view * u_model * vec4(position, 1.0);
+    // Transform normal with the upper-left 3x3 of the model-view matrix.
+    v_normal_vs = mat3(u_view * u_model) * normal;
+    gl_Position = u_proj * pos_vs;
 }
 "#;
 
 pub(crate) const FRAGMENT_SHADER_SRC: &str = r#"
+precision mediump float;
+
+varying vec3 v_normal_vs;
+
+uniform vec3 u_light_dir_vs; // Direction the light travels, in view space.
+
 void main() {
-    gl_FragColor = vec4(0.2, 0.7, 1.0, 1.0);
+    vec3 n = -normalize(v_normal_vs);
+    float ndl = max(dot(n, -normalize(u_light_dir_vs)), 0.0);
+    vec3 base = vec3(0.8, 0.85, 0.95);
+    vec3 color = base * (0.15 + 0.85 * ndl);
+    gl_FragColor = vec4(color, 1.0);
 }
 "#;
 

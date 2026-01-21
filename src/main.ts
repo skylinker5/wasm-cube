@@ -6,6 +6,7 @@ async function main() {
 
   const canvas = document.getElementById("canvas") as HTMLCanvasElement;
   const viewer = new wasm.Viewer(canvas);
+  const primitiveSelect = document.getElementById("primitive") as HTMLSelectElement | null;
 
   const resize = () => {
     // Match drawing buffer to CSS size for crisp rendering.
@@ -24,6 +25,16 @@ async function main() {
 
   resize();
   window.addEventListener("resize", resize);
+
+  if (primitiveSelect) {
+    const applyPrimitive = () => {
+      viewer.set_primitive(primitiveSelect.value);
+      viewer.fit_to_view();
+      viewer.draw();
+    };
+    primitiveSelect.addEventListener("change", applyPrimitive);
+    applyPrimitive();
+  }
 
   let isDragging = false;
   let lastX = 0;
