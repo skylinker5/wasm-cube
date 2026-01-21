@@ -1,4 +1,5 @@
 import init, * as wasm from "../wasm/pkg/wasm_cube";
+import "./style.css";
 
 async function main() {
   await init();
