@@ -4,7 +4,7 @@ use web_sys::HtmlCanvasElement;
 use crate::camera::{Bounds, Camera};
 use crate::geometry::{make_primitive, Primitive};
 use crate::math::{Mat4, Vec3};
-use crate::renderer::Renderer;
+use crate::renderer::{RenderMode, Renderer};
 
 #[wasm_bindgen]
 pub struct Viewer {
@@ -59,6 +59,16 @@ impl Viewer {
             self.renderer.set_mesh(&mesh);
             self.bounds = mesh.bounds;
             self.fit_to_view();
+        }
+    }
+
+    /// Set the render mode.
+    /// Allowed: "solid", "wireframe".
+    pub fn set_render_mode(&mut self, mode: &str) {
+        match mode {
+            "solid" => self.renderer.set_render_mode(RenderMode::Solid),
+            "wireframe" => self.renderer.set_render_mode(RenderMode::Wireframe),
+            _ => {}
         }
     }
 

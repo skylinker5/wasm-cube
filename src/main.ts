@@ -7,6 +7,7 @@ async function main() {
   const canvas = document.getElementById("canvas") as HTMLCanvasElement;
   const viewer = new wasm.Viewer(canvas);
   const primitiveSelect = document.getElementById("primitive") as HTMLSelectElement | null;
+  const renderModeSelect = document.getElementById("renderMode") as HTMLSelectElement | null;
 
   const resize = () => {
     // Match drawing buffer to CSS size for crisp rendering.
@@ -34,6 +35,15 @@ async function main() {
     };
     primitiveSelect.addEventListener("change", applyPrimitive);
     applyPrimitive();
+  }
+
+  if (renderModeSelect) {
+    const applyRenderMode = () => {
+      viewer.set_render_mode(renderModeSelect.value);
+      viewer.draw();
+    };
+    renderModeSelect.addEventListener("change", applyRenderMode);
+    applyRenderMode();
   }
 
   let isDragging = false;

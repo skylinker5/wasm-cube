@@ -6,12 +6,19 @@ use web_sys::{
 use crate::geometry::Mesh;
 use crate::shader::{compile_shader, link_program, FRAGMENT_SHADER_SRC, VERTEX_SHADER_SRC};
 
+#[derive(Clone, Copy)]
+pub(crate) enum RenderMode {
+    Solid,
+    Wireframe,
+}
+
 pub(crate) struct Renderer {
     gl: WebGlRenderingContext,
     program: WebGlProgram,
     vbo: WebGlBuffer,
     nbo: WebGlBuffer,
     ibo: Option<WebGlBuffer>,
+    wireframe_ibo: Option<WebGlBuffer>,
     position_location: u32,
     normal_location: u32,
     model_location: WebGlUniformLocation,
@@ -19,7 +26,9 @@ pub(crate) struct Renderer {
     proj_location: WebGlUniformLocation,
     light_dir_location: WebGlUniformLocation,
     index_count: i32,
+    wireframe_index_count: i32,
     vertex_count: i32,
+    render_mode: RenderMode,
 }
 
 impl Renderer {
@@ -86,6 +95,7 @@ impl Renderer {
             vbo,
             nbo,
             ibo: None,
+            wireframe_ibo: None,
             position_location,
             normal_location,
             model_location,
@@ -93,8 +103,14 @@ impl Renderer {
             proj_location,
             light_dir_location,
             index_count: 0,
+            wireframe_index_count: 0,
             vertex_count: 0,
+            render_mode: RenderMode::Solid,
         })
+    }
+
+    pub(crate) fn set_render_mode(&mut self, mode: RenderMode) {
+        self.render_mode = mode;
     }
 
     pub(crate) fn set_mesh(&mut self, mesh: &Mesh) {
@@ -121,10 +137,13 @@ impl Renderer {
 
         if mesh.indices.is_empty() {
             self.ibo = None;
+            self.wireframe_ibo = None;
             self.index_count = 0;
+            self.wireframe_index_count = 0;
             return;
         }
 
+        // Upload triangle indices
         let ibo = self
             .gl
             .create_buffer()
@@ -140,6 +159,37 @@ impl Renderer {
         );
         self.ibo = Some(ibo);
         self.index_count = mesh.indices.len() as i32;
+
+        // Generate wireframe edge indices from triangle indices
+        // Each triangle (i0, i1, i2) becomes 3 edges: (i0,i1), (i1,i2), (i2,i0)
+        let mut wireframe_indices = Vec::new();
+        for chunk in mesh.indices.chunks_exact(3) {
+            let i0 = chunk[0];
+            let i1 = chunk[1];
+            let i2 = chunk[2];
+            wireframe_indices.push(i0);
+            wireframe_indices.push(i1);
+            wireframe_indices.push(i1);
+            wireframe_indices.push(i2);
+            wireframe_indices.push(i2);
+            wireframe_indices.push(i0);
+        }
+
+        let wireframe_ibo = self
+            .gl
+            .create_buffer()
+            .ok_or_else(|| js_error("failed to create wireframe index buffer"))
+            .unwrap();
+        self.gl
+            .bind_buffer(WebGlRenderingContext::ELEMENT_ARRAY_BUFFER, Some(&wireframe_ibo));
+        upload_u16_slice(
+            &self.gl,
+            WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+            &wireframe_indices,
+            WebGlRenderingContext::STATIC_DRAW,
+        );
+        self.wireframe_ibo = Some(wireframe_ibo);
+        self.wireframe_index_count = wireframe_indices.len() as i32;
     }
 
     pub(crate) fn draw(
@@ -185,23 +235,65 @@ impl Renderer {
             .bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&self.vbo));
         self.gl
             .bind_buffer(WebGlRenderingContext::ARRAY_BUFFER, Some(&self.nbo));
-        if let Some(ibo) = &self.ibo {
-            self.gl.bind_buffer(
-                WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
-                Some(ibo),
-            );
-            self.gl.draw_elements_with_i32(
-                WebGlRenderingContext::TRIANGLES,
-                self.index_count,
-                WebGlRenderingContext::UNSIGNED_SHORT,
-                0,
-            );
-        } else {
-            self.gl.draw_arrays(
-                WebGlRenderingContext::TRIANGLES,
-                0,
-                self.vertex_count.max(0),
-            );
+
+        match self.render_mode {
+            RenderMode::Solid => {
+                if let Some(ibo) = &self.ibo {
+                    self.gl.bind_buffer(
+                        WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+                        Some(ibo),
+                    );
+                    self.gl.draw_elements_with_i32(
+                        WebGlRenderingContext::TRIANGLES,
+                        self.index_count,
+                        WebGlRenderingContext::UNSIGNED_SHORT,
+                        0,
+                    );
+                } else {
+                    self.gl.draw_arrays(
+                        WebGlRenderingContext::TRIANGLES,
+                        0,
+                        self.vertex_count.max(0),
+                    );
+                }
+            }
+            RenderMode::Wireframe => {
+                if let Some(wireframe_ibo) = &self.wireframe_ibo {
+                    self.gl.bind_buffer(
+                        WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+                        Some(wireframe_ibo),
+                    );
+                    self.gl.draw_elements_with_i32(
+                        WebGlRenderingContext::LINES,
+                        self.wireframe_index_count,
+                        WebGlRenderingContext::UNSIGNED_SHORT,
+                        0,
+                    );
+                } else if let Some(ibo) = &self.ibo {
+                    // Fallback: draw triangles as line loops (less efficient)
+                    self.gl.bind_buffer(
+                        WebGlRenderingContext::ELEMENT_ARRAY_BUFFER,
+                        Some(ibo),
+                    );
+                    // Draw each triangle as a line loop
+                    for i in 0..(self.index_count / 3) {
+                        self.gl.draw_elements_with_i32(
+                            WebGlRenderingContext::LINE_LOOP,
+                            3,
+                            WebGlRenderingContext::UNSIGNED_SHORT,
+                            (i * 3) as i32,
+                        );
+                    }
+                } else {
+                    // Non-indexed wireframe: draw as lines
+                    let line_count = (self.vertex_count / 3) * 3;
+                    self.gl.draw_arrays(
+                        WebGlRenderingContext::LINES,
+                        0,
+                        line_count.max(0),
+                    );
+                }
+            }
         }
     }
 }
