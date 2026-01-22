@@ -86,8 +86,17 @@ impl Viewer {
     /// Allowed: "perspective", "orth".
     pub fn set_view_mode(&mut self, mode: &str) {
         match mode {
-            "perspective" => self.view_mode = ViewMode::Perspective,
-            "orth" => self.view_mode = ViewMode::Orthographic,
+            "perspective" => {
+                self.view_mode = ViewMode::Perspective;
+            }
+            "orth" => {
+                self.view_mode = ViewMode::Orthographic;
+                // Update orthographic size to match current view, but don't reset camera
+                // Scale orthographic size to roughly match the current perspective view
+                let tan_half_fovy = (self.camera.fovy * 0.5).tan();
+                let visible_height = 2.0 * self.camera.distance * tan_half_fovy;
+                self.orthographic_size = visible_height * 0.5;
+            }
             _ => {}
         }
     }
@@ -107,7 +116,20 @@ impl Viewer {
 
     /// Pan in world units (relative to current view).
     pub fn pan(&mut self, right: f32, up: f32) {
-        self.camera.pan(right, up);
+        match self.view_mode {
+            ViewMode::Perspective => {
+                // In perspective mode, pan is relative to camera distance
+                // The pan speed in TypeScript (PAN_SPEED) is already calibrated for perspective
+                self.camera.pan(right, up);
+            }
+            ViewMode::Orthographic => {
+                // In orthographic mode, scale pan to match perspective feel
+                // Use camera distance as reference to maintain consistent panning speed
+                // The orthographic_size represents the visible height, so we scale pan accordingly
+                let scale = self.camera.distance * 0.1;
+                self.camera.pan(right * scale, up * scale);
+            }
+        }
     }
 
     /// Zoom factor ( >1 out, <1 in ).
